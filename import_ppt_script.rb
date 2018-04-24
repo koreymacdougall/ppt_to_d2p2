@@ -9,12 +9,8 @@
 #
 # 1. Run "ruby import_ppt_script.rb"
 #
-# 2. in image_write_string, need to specify the directory on the disk where the
-#    uploaded images are stored (i.e., the tutor's media directory)
-#    - on the server, I think this is ****
-#    - in this script, it is currently called "target"
-#
-# 3. need to manually copy the pictures from the uploaded_images in working_dir to the tutors media dir (same dir as #2 above)
+# 2. Import zip file into D2P2
+
 
 # setup all the files that will be needed for the zip
 csv_filenames = [
@@ -84,26 +80,18 @@ open('Sections.csv', 'a') { |f|
   f << sections_write_string
 }
 
-# using the exported html from libreoffice
-# libreoffice outputs each slide as an text{n}.html file
-# turn each of these into a csv file
-text_html_files = Dir[ "exported_formats/exported_html/text*"].sort_by{|s| s[/\d+/].to_i }
 
-# using exported ODF presentation (.odp)
-# get images in the right places
-# grab all images in the Pictures directory, populate array
-image_files = Dir[ "exported_formats/exported_odp/Pictures/*"]
+# 1. using exported ODF presentation (.odp)
 # copy all pictures to the uploaded images dir in working dir; 
-# manually copy them to the correct place after the import
-`mkdir -p uploaded_images`
-`cp exported_formats/exported_odp/Pictures/* uploaded_images/`
+`cp -r exported_formats/exported_odp/Pictures/ uploaded_images/`
 
+# get all the presentation text from the xml file
 full_presentation_contents = File.read('exported_formats/exported_odp/content.xml')
-# the split string is important; not sure that page numbers are always
-# represented in the xml the same way
+
+# split the pres using 'draw:name...'
 split_presentation_contents_array = full_presentation_contents.split('draw:name="page')
 
-# use the regex to find which page a picture occurs on
+# use regex to find which page a picture occurs on
 page_num_regex = /Pictures\/.*?"/
 matches = []
 scanned_array = split_presentation_contents_array[1..-1].each do |a|
@@ -111,7 +99,10 @@ scanned_array = split_presentation_contents_array[1..-1].each do |a|
   # remove the trailing quote that the regex grabbed
   matches << match.map!{|m| m.chomp('"')}
 end
-# p matches
+
+# 2. using the exported html from libreoffice
+# libreoffice outputs each slide as an text{n}.html file; turn each of these into a csv file
+text_html_files = Dir[ "exported_formats/exported_html/text*"].sort_by{|s| s[/\d+/].to_i }
 
 # grab content from textN.html file
 text_html_files.each_with_index do |filename, index|
@@ -128,11 +119,9 @@ text_html_files.each_with_index do |filename, index|
   page_content.gsub!(","," ")
   page_content = page_content[3..-4]
 
-  puts index
   matches[index].each do |m|
     m.gsub!("Pictures/","")
     img_write_string = "<p><img src='/d2p2/uploaded_images/target/#{m}'></p>"
-    p img_write_string
     page_content << img_write_string
   end
 
@@ -152,4 +141,8 @@ text_html_files.each_with_index do |filename, index|
 end
 
 # wrap all the csv files into a zip
-`zip tutor_to_upload.zip *csv uploaded_images/*`
+p `zip tutor_to_upload.zip *csv uploaded_images/*`
+csv_filenames.each do |f|
+  File.delete(f)
+end
+`rm -rf uploaded_images/`
